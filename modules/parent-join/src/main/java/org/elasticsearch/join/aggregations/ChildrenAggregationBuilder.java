@@ -1,20 +1,9 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.join.aggregations;
@@ -25,28 +14,24 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.index.fielddata.plain.SortedSetDVOrdinalsIndexFieldData;
-import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.MappedFieldType;
-import org.elasticsearch.index.mapper.ParentFieldMapper;
-import org.elasticsearch.join.mapper.ParentIdFieldMapper;
-import org.elasticsearch.join.mapper.ParentJoinFieldMapper;
+import org.elasticsearch.join.mapper.Joiner;
+import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregatorFactories.Builder;
 import org.elasticsearch.search.aggregations.AggregatorFactory;
-import org.elasticsearch.search.aggregations.support.FieldContext;
-import org.elasticsearch.search.aggregations.support.ValueType;
-import org.elasticsearch.search.aggregations.support.ValuesSource.Bytes.WithOrdinals;
+import org.elasticsearch.search.aggregations.support.AggregationContext;
+import org.elasticsearch.search.aggregations.support.CoreValuesSourceType;
 import org.elasticsearch.search.aggregations.support.ValuesSourceAggregationBuilder;
 import org.elasticsearch.search.aggregations.support.ValuesSourceAggregatorFactory;
 import org.elasticsearch.search.aggregations.support.ValuesSourceConfig;
+import org.elasticsearch.search.aggregations.support.ValuesSourceRegistry;
 import org.elasticsearch.search.aggregations.support.ValuesSourceType;
-import org.elasticsearch.search.internal.SearchContext;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Objects;
 
-public class ChildrenAggregationBuilder
-        extends ValuesSourceAggregationBuilder<WithOrdinals, ChildrenAggregationBuilder> {
+public class ChildrenAggregationBuilder extends ValuesSourceAggregationBuilder<ChildrenAggregationBuilder> {
 
     public static final String NAME = "children";
 
@@ -61,18 +46,36 @@ public class ChildrenAggregationBuilder
      *            the type of children documents
      */
     public ChildrenAggregationBuilder(String name, String childType) {
-        super(name, ValuesSourceType.BYTES, ValueType.STRING);
+        super(name);
         if (childType == null) {
             throw new IllegalArgumentException("[childType] must not be null: [" + name + "]");
         }
         this.childType = childType;
     }
 
+    protected ChildrenAggregationBuilder(ChildrenAggregationBuilder clone,
+                                         Builder factoriesBuilder, Map<String, Object> metadata) {
+        super(clone, factoriesBuilder, metadata);
+        this.childType = clone.childType;
+        this.childFilter = clone.childFilter;
+        this.parentFilter = clone.parentFilter;
+    }
+
+    @Override
+    protected ValuesSourceType defaultValueSourceType() {
+        return CoreValuesSourceType.KEYWORD;
+    }
+
+    @Override
+    protected AggregationBuilder shallowCopy(Builder factoriesBuilder, Map<String, Object> metadata) {
+        return new ChildrenAggregationBuilder(this, factoriesBuilder, metadata);
+    }
+
     /**
      * Read from a stream.
      */
     public ChildrenAggregationBuilder(StreamInput in) throws IOException {
-        super(in, ValuesSourceType.BYTES, ValueType.STRING);
+        super(in);
         childType = in.readString();
     }
 
@@ -82,61 +85,34 @@ public class ChildrenAggregationBuilder
     }
 
     @Override
-    protected ValuesSourceAggregatorFactory<WithOrdinals, ?> innerBuild(SearchContext context,
-                                                                        ValuesSourceConfig<WithOrdinals> config,
-                                                                        AggregatorFactory<?> parent,
-                                                                        Builder subFactoriesBuilder) throws IOException {
+    public BucketCardinality bucketCardinality() {
+        return BucketCardinality.ONE;
+    }
+
+    protected ValuesSourceAggregatorFactory innerBuild(AggregationContext context,
+                                                       ValuesSourceConfig config,
+                                                       AggregatorFactory parent,
+                                                       Builder subFactoriesBuilder) throws IOException {
         return new ChildrenAggregatorFactory(name, config, childFilter, parentFilter, context, parent,
-                subFactoriesBuilder, metaData);
+                subFactoriesBuilder, metadata);
     }
 
     @Override
-    protected ValuesSourceConfig<WithOrdinals> resolveConfig(SearchContext context) {
-        ValuesSourceConfig<WithOrdinals> config = new ValuesSourceConfig<>(ValuesSourceType.BYTES);
-        if (context.mapperService().getIndexSettings().isSingleType()) {
-            joinFieldResolveConfig(context, config);
-        } else {
-            parentFieldResolveConfig(context, config);
+    protected ValuesSourceConfig resolveConfig(AggregationContext context) {
+        ValuesSourceConfig config;
+
+        Joiner joiner = Joiner.getJoiner(context);
+        if (joiner == null || joiner.childTypeExists(childType) == false) {
+            // Unmapped field case
+            config = ValuesSourceConfig.resolveUnmapped(defaultValueSourceType(), context);
+            return config;
         }
+
+        parentFilter = joiner.parentFilter(childType);
+        childFilter = joiner.filter(childType);
+        MappedFieldType fieldType = context.getFieldType(joiner.parentJoinField(childType));
+        config = ValuesSourceConfig.resolveFieldOnly(fieldType, context);
         return config;
-    }
-
-    private void joinFieldResolveConfig(SearchContext context, ValuesSourceConfig<WithOrdinals> config) {
-        ParentJoinFieldMapper parentJoinFieldMapper = ParentJoinFieldMapper.getMapper(context.mapperService());
-        ParentIdFieldMapper parentIdFieldMapper = parentJoinFieldMapper.getParentIdFieldMapper(childType, false);
-        if (parentIdFieldMapper != null) {
-            parentFilter = parentIdFieldMapper.getParentFilter();
-            childFilter = parentIdFieldMapper.getChildFilter(childType);
-            MappedFieldType fieldType = parentIdFieldMapper.fieldType();
-            final SortedSetDVOrdinalsIndexFieldData fieldData = context.getForField(fieldType);
-            config.fieldContext(new FieldContext(fieldType.name(), fieldData, fieldType));
-        } else {
-            config.unmapped(true);
-        }
-    }
-
-    private void parentFieldResolveConfig(SearchContext context, ValuesSourceConfig<WithOrdinals> config) {
-        DocumentMapper childDocMapper = context.mapperService().documentMapper(childType);
-        if (childDocMapper != null) {
-            ParentFieldMapper parentFieldMapper = childDocMapper.parentFieldMapper();
-            if (!parentFieldMapper.active()) {
-                throw new IllegalArgumentException("[children] no [_parent] field not configured that points to a parent type");
-            }
-            String parentType = parentFieldMapper.type();
-            DocumentMapper parentDocMapper = context.mapperService().documentMapper(parentType);
-            if (parentDocMapper != null) {
-                parentFilter = parentDocMapper.typeFilter(context.getQueryShardContext());
-                childFilter = childDocMapper.typeFilter(context.getQueryShardContext());
-                MappedFieldType parentFieldType = parentDocMapper.parentFieldMapper().getParentJoinFieldType();
-                final SortedSetDVOrdinalsIndexFieldData fieldData = context.getForField(parentFieldType);
-                config.fieldContext(new FieldContext(parentFieldType.name(), fieldData,
-                    parentFieldType));
-            } else {
-                config.unmapped(true);
-            }
-        } else {
-            config.unmapped(true);
-        }
     }
 
     @Override
@@ -174,12 +150,15 @@ public class ChildrenAggregationBuilder
     }
 
     @Override
-    protected int innerHashCode() {
-        return Objects.hash(childType);
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), childType);
     }
 
     @Override
-    protected boolean innerEquals(Object obj) {
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        if (super.equals(obj) == false) return false;
         ChildrenAggregationBuilder other = (ChildrenAggregationBuilder) obj;
         return Objects.equals(childType, other.childType);
     }
@@ -187,5 +166,10 @@ public class ChildrenAggregationBuilder
     @Override
     public String getType() {
         return NAME;
+    }
+
+    @Override
+    protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
+        return ValuesSourceRegistry.UNREGISTERED_KEY;
     }
 }

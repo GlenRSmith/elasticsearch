@@ -1,20 +1,9 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 package org.elasticsearch.test;
 
@@ -24,13 +13,12 @@ import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.filter.RegexFilter;
 import org.elasticsearch.common.regex.Regex;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Pattern;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertTrue;
 
 /**
  * Test appender that can be used to verify that certain events were logged correctly
@@ -42,8 +30,13 @@ public class MockLogAppender extends AbstractAppender {
     private List<LoggingExpectation> expectations;
 
     public MockLogAppender() throws IllegalAccessException {
-        super("mock", RegexFilter.createFilter(".*(\n.*)*", new String[0], false, null, null), null);
-        expectations = new ArrayList<>();
+        super("mock", RegexFilter.createFilter(".*(\n.*)*", new String[0], false, null, null), null, false);
+        /*
+         * We use a copy-on-write array list since log messages could be appended while we are setting up expectations. When that occurs,
+         * we would run into a concurrent modification exception from the iteration over the expectations in #append, concurrent with a
+         * modification from #addExpectation.
+         */
+        expectations = new CopyOnWriteArrayList<>();
     }
 
     public void addExpectation(LoggingExpectation expectation) {
@@ -86,18 +79,23 @@ public class MockLogAppender extends AbstractAppender {
 
         @Override
         public void match(LogEvent event) {
-            if (event.getLevel().equals(level) && event.getLoggerName().equals(logger)) {
+            if (event.getLevel().equals(level) && event.getLoggerName().equals(logger) && innerMatch(event)) {
                 if (Regex.isSimpleMatchPattern(message)) {
                     if (Regex.simpleMatch(message, event.getMessage().getFormattedMessage())) {
                         saw = true;
                     }
                 } else {
-                    if (event.getMessage().toString().contains(message)) {
+                    if (event.getMessage().getFormattedMessage().contains(message)) {
                         saw = true;
                     }
                 }
             }
         }
+
+        public boolean innerMatch(final LogEvent event) {
+            return true;
+        }
+
     }
 
     public static class UnseenEventExpectation extends AbstractEventExpectation {
@@ -108,7 +106,7 @@ public class MockLogAppender extends AbstractAppender {
 
         @Override
         public void assertMatched() {
-            assertThat(name, saw, equalTo(false));
+            assertThat("expected not to see " + name + " but did", saw, equalTo(false));
         }
     }
 
@@ -120,11 +118,37 @@ public class MockLogAppender extends AbstractAppender {
 
         @Override
         public void assertMatched() {
-            assertThat(name, saw, equalTo(true));
+            assertThat("expected to see " + name + " but did not", saw, equalTo(true));
         }
     }
 
-    public static class PatternSeenEventExcpectation implements LoggingExpectation {
+    public static class ExceptionSeenEventExpectation extends SeenEventExpectation {
+
+        private final Class<? extends Exception> clazz;
+        private final String exceptionMessage;
+
+        public ExceptionSeenEventExpectation(
+                final String name,
+                final String logger,
+                final Level level,
+                final String message,
+                final Class<? extends Exception> clazz,
+                final String exceptionMessage) {
+            super(name, logger, level, message);
+            this.clazz = clazz;
+            this.exceptionMessage = exceptionMessage;
+        }
+
+        @Override
+        public boolean innerMatch(final LogEvent event) {
+            return event.getThrown() != null
+                    && event.getThrown().getClass() == clazz
+                    && event.getThrown().getMessage().equals(exceptionMessage);
+        }
+
+    }
+
+    public static class PatternSeenEventExpectation implements LoggingExpectation {
 
         protected final String name;
         protected final String logger;
@@ -132,7 +156,7 @@ public class MockLogAppender extends AbstractAppender {
         protected final String pattern;
         volatile boolean saw;
 
-        public PatternSeenEventExcpectation(String name, String logger, Level level, String pattern) {
+        public PatternSeenEventExpectation(String name, String logger, Level level, String pattern) {
             this.name = name;
             this.logger = logger;
             this.level = level;

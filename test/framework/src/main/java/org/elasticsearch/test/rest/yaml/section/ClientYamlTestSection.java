@@ -1,20 +1,9 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 package org.elasticsearch.test.rest.yaml.section;
 
@@ -24,7 +13,9 @@ import org.elasticsearch.common.xcontent.XContentParser;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Represents a test section, which is composed of a skip section and multiple executable sections.
@@ -32,34 +23,42 @@ import java.util.List;
 public class ClientYamlTestSection implements Comparable<ClientYamlTestSection> {
     public static ClientYamlTestSection parse(XContentParser parser) throws IOException {
         ParserUtils.advanceToFieldName(parser);
-        ClientYamlTestSection testSection = new ClientYamlTestSection(parser.getTokenLocation(), parser.currentName());
+        XContentLocation sectionLocation = parser.getTokenLocation();
+        String sectionName = parser.currentName();
+        List<ExecutableSection> executableSections = new ArrayList<>();
         try {
             parser.nextToken();
-            testSection.setSkipSection(SkipSection.parseIfNext(parser));
+            SkipSection skipSection = SkipSection.parseIfNext(parser);
             while (parser.currentToken() != XContentParser.Token.END_ARRAY) {
                 ParserUtils.advanceToFieldName(parser);
-                testSection.addExecutableSection(ExecutableSection.parse(parser));
+                executableSections.add(ExecutableSection.parse(parser));
             }
             if (parser.nextToken() != XContentParser.Token.END_OBJECT) {
-                throw new IllegalArgumentException("malformed section [" + testSection.getName() + "] expected ["
+                throw new IllegalArgumentException("malformed section [" + sectionName + "] expected ["
                         + XContentParser.Token.END_OBJECT + "] but was [" + parser.currentToken() + "]");
             }
             parser.nextToken();
-            return testSection;
+            return new ClientYamlTestSection(sectionLocation, sectionName, skipSection, executableSections);
         } catch (Exception e) {
-            throw new ParsingException(parser.getTokenLocation(), "Error parsing test named [" + testSection.getName() + "]", e);
+            throw new ParsingException(parser.getTokenLocation(), "Error parsing test named [" + sectionName + "]", e);
         }
     }
 
     private final XContentLocation location;
     private final String name;
-    private SkipSection skipSection;
+    private final SkipSection skipSection;
     private final List<ExecutableSection> executableSections;
 
-    public ClientYamlTestSection(XContentLocation location, String name) {
+    public ClientYamlTestSection(
+        XContentLocation location,
+        String name,
+        SkipSection skipSection,
+        List<ExecutableSection> executableSections
+    ) {
         this.location = location;
         this.name = name;
-        this.executableSections = new ArrayList<>();
+        this.skipSection = Objects.requireNonNull(skipSection, "skip section cannot be null");
+        this.executableSections = Collections.unmodifiableList(executableSections);
     }
 
     public XContentLocation getLocation() {
@@ -74,25 +73,8 @@ public class ClientYamlTestSection implements Comparable<ClientYamlTestSection> 
         return skipSection;
     }
 
-    public void setSkipSection(SkipSection skipSection) {
-        this.skipSection = skipSection;
-    }
-
     public List<ExecutableSection> getExecutableSections() {
         return executableSections;
-    }
-
-    public void addExecutableSection(ExecutableSection executableSection) {
-        if (executableSection instanceof DoSection) {
-            DoSection doSection = (DoSection) executableSection;
-            if (false == doSection.getExpectedWarningHeaders().isEmpty()
-                    && false == skipSection.getFeatures().contains("warnings")) {
-                throw new IllegalArgumentException("Attempted to add a [do] with a [warnings] section without a corresponding [skip] so "
-                        + "runners that do not support the [warnings] section can skip the test at line ["
-                        + doSection.getLocation().lineNumber + "]");
-            }
-        }
-        this.executableSections.add(executableSection);
     }
 
     @Override
@@ -102,7 +84,7 @@ public class ClientYamlTestSection implements Comparable<ClientYamlTestSection> 
 
         ClientYamlTestSection that = (ClientYamlTestSection) o;
 
-        if (name != null ? !name.equals(that.name) : that.name != null) return false;
+        if (name != null ? name.equals(that.name) == false : that.name != null) return false;
 
         return true;
     }

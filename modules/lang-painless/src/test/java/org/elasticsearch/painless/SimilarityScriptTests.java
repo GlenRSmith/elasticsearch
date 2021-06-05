@@ -1,20 +1,9 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.painless;
@@ -34,30 +23,35 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.RAMDirectory;
 import org.elasticsearch.index.similarity.ScriptedSimilarity;
+import org.elasticsearch.painless.spi.Whitelist;
 import org.elasticsearch.script.ScriptContext;
 import org.elasticsearch.script.SimilarityScript;
 import org.elasticsearch.script.SimilarityWeightScript;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class SimilarityScriptTests extends ScriptTestCase {
 
     @Override
-    protected Collection<ScriptContext<?>> scriptContexts() {
-        return Arrays.asList(SimilarityScript.CONTEXT, SimilarityWeightScript.CONTEXT);
+    protected Map<ScriptContext<?>, List<Whitelist>> scriptContexts() {
+        Map<ScriptContext<?>, List<Whitelist>> contexts = new HashMap<>();
+        contexts.put(SimilarityScript.CONTEXT, Whitelist.BASE_WHITELISTS);
+        contexts.put(SimilarityWeightScript.CONTEXT, Whitelist.BASE_WHITELISTS);
+        return contexts;
     }
 
     public void testBasics() throws IOException {
         SimilarityScript.Factory factory = scriptEngine.compile(
                 "foobar", "return query.boost * doc.freq / doc.length", SimilarityScript.CONTEXT, Collections.emptyMap());
         ScriptedSimilarity sim = new ScriptedSimilarity("foobar", null, "foobaz", factory::newInstance, true);
-        Directory dir = new RAMDirectory();
+        Directory dir = new ByteBuffersDirectory();
         IndexWriter w = new IndexWriter(dir, newIndexWriterConfig().setSimilarity(sim));
 
         Document doc = new Document();
@@ -84,7 +78,7 @@ public class SimilarityScriptTests extends ScriptTestCase {
                 .add(new TermQuery(new Term("match", "yes")), Occur.FILTER)
                 .build(), 3.2f);
         TopDocs topDocs = searcher.search(query, 1);
-        assertEquals(1, topDocs.totalHits);
+        assertEquals(1, topDocs.totalHits.value);
         assertEquals((float) (3.2 * 2 / 3), topDocs.scoreDocs[0].score, 0);
         w.close();
         dir.close();
@@ -96,7 +90,7 @@ public class SimilarityScriptTests extends ScriptTestCase {
         SimilarityScript.Factory factory = scriptEngine.compile(
                 "foobar", "return weight * doc.freq / doc.length", SimilarityScript.CONTEXT, Collections.emptyMap());
         ScriptedSimilarity sim = new ScriptedSimilarity("foobar", weightFactory::newInstance, "foobaz", factory::newInstance, true);
-        Directory dir = new RAMDirectory();
+        Directory dir = new ByteBuffersDirectory();
         IndexWriter w = new IndexWriter(dir, newIndexWriterConfig().setSimilarity(sim));
 
         Document doc = new Document();
@@ -123,7 +117,7 @@ public class SimilarityScriptTests extends ScriptTestCase {
                 .add(new TermQuery(new Term("match", "yes")), Occur.FILTER)
                 .build(), 3.2f);
         TopDocs topDocs = searcher.search(query, 1);
-        assertEquals(1, topDocs.totalHits);
+        assertEquals(1, topDocs.totalHits.value);
         assertEquals((float) (3.2 * 2 / 3), topDocs.scoreDocs[0].score, 0);
         w.close();
         dir.close();

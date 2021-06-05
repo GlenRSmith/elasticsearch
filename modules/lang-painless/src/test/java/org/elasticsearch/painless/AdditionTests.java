@@ -1,20 +1,9 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.painless;
@@ -22,7 +11,7 @@ package org.elasticsearch.painless;
 /** Tests for addition operator across all types */
 //TODO: NaN/Inf/overflow/...
 public class AdditionTests extends ScriptTestCase {
-    
+
     public void testBasics() throws Exception {
         assertEquals(3.0, exec("double x = 1; byte y = 2; return x + y;"));
     }
@@ -195,7 +184,7 @@ public class AdditionTests extends ScriptTestCase {
         assertEquals(1.0+0.0, exec("return 1.0+0.0;"));
         assertEquals(0.0+0.0, exec("return 0.0+0.0;"));
     }
-    
+
     public void testDef() {
         assertEquals(2, exec("def x = (byte)1; def y = (byte)1; return x + y"));
         assertEquals(2, exec("def x = (short)1; def y = (byte)1; return x + y"));
@@ -253,7 +242,7 @@ public class AdditionTests extends ScriptTestCase {
         assertEquals(2D, exec("def x = (float)1; def y = (double)1; return x + y"));
         assertEquals(2D, exec("def x = (double)1; def y = (double)1; return x + y"));
     }
-    
+
     public void testDefTypedLHS() {
         assertEquals(2, exec("byte x = (byte)1; def y = (byte)1; return x + y"));
         assertEquals(2, exec("short x = (short)1; def y = (byte)1; return x + y"));
@@ -311,7 +300,7 @@ public class AdditionTests extends ScriptTestCase {
         assertEquals(2D, exec("float x = (float)1; def y = (double)1; return x + y"));
         assertEquals(2D, exec("double x = (double)1; def y = (double)1; return x + y"));
     }
-    
+
     public void testDefTypedRHS() {
         assertEquals(2, exec("def x = (byte)1; byte y = (byte)1; return x + y"));
         assertEquals(2, exec("def x = (short)1; byte y = (byte)1; return x + y"));
@@ -369,19 +358,19 @@ public class AdditionTests extends ScriptTestCase {
         assertEquals(2D, exec("def x = (float)1; double y = (double)1; return x + y"));
         assertEquals(2D, exec("def x = (double)1; double y = (double)1; return x + y"));
     }
-    
+
     public void testDefNulls() {
         expectScriptThrows(NullPointerException.class, () -> {
-            exec("def x = null; int y = 1; return x + y"); 
+            exec("def x = null; int y = 1; return x + y");
         });
         expectScriptThrows(NullPointerException.class, () -> {
-            exec("int x = 1; def y = null; return x + y"); 
+            exec("int x = 1; def y = null; return x + y");
         });
         expectScriptThrows(NullPointerException.class, () -> {
-            exec("def x = null; def y = 1; return x + y"); 
+            exec("def x = null; def y = 1; return x + y");
         });
     }
-    
+
     public void testCompoundAssignment() {
         // byte
         assertEquals((byte) 15, exec("byte x = 5; x += 10; return x;"));
@@ -406,7 +395,7 @@ public class AdditionTests extends ScriptTestCase {
         assertEquals(15D, exec("double x = 5.0; x += 10; return x;"));
         assertEquals(-5D, exec("double x = 5.0; x += -10; return x;"));
     }
-    
+
     public void testDefCompoundAssignmentLHS() {
         // byte
         assertEquals((byte) 15, exec("def x = (byte)5; x += 10; return x;"));
@@ -431,7 +420,7 @@ public class AdditionTests extends ScriptTestCase {
         assertEquals(15D, exec("def x = 5.0; x += 10; return x;"));
         assertEquals(-5D, exec("def x = 5.0; x += -10; return x;"));
     }
-    
+
     public void testDefCompoundAssignmentRHS() {
         // byte
         assertEquals((byte) 15, exec("byte x = 5; def y = 10; x += y; return x;"));

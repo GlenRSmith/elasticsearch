@@ -1,13 +1,13 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch B.V. under one or more contributor
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch B.V. licenses this file to you under
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -106,7 +106,8 @@ public class HeapBufferedAsyncResponseConsumerTests extends RestClientTestCase {
             IllegalAccessException, InvocationTargetException, InstantiationException {
         int bufferLimit = randomIntBetween(1, Integer.MAX_VALUE);
         //we use reflection to make sure that the class can be instantiated from the outside, and the constructor is public
-        Constructor<?> constructor = HttpAsyncResponseConsumerFactory.HeapBufferedResponseConsumerFactory.class.getConstructor(Integer.TYPE);
+        Constructor<?> constructor =
+                HttpAsyncResponseConsumerFactory.HeapBufferedResponseConsumerFactory.class.getConstructor(Integer.TYPE);
         assertEquals(Modifier.PUBLIC, constructor.getModifiers() & Modifier.PUBLIC);
         Object object = constructor.newInstance(bufferLimit);
         assertThat(object, instanceOf(HttpAsyncResponseConsumerFactory.HeapBufferedResponseConsumerFactory.class));
@@ -134,7 +135,7 @@ public class HeapBufferedAsyncResponseConsumerTests extends RestClientTestCase {
                 return contentLength.get();
             }
         };
-        contentLength.set(randomLong(bufferLimit));
+        contentLength.set(randomLongBetween(0L, bufferLimit));
         consumer.onEntityEnclosed(entity, ContentType.APPLICATION_JSON);
 
         contentLength.set(randomLongBetween(bufferLimit + 1, MAX_TEST_BUFFER_SIZE));

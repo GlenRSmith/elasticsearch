@@ -1,37 +1,32 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 package org.elasticsearch.test.rest.yaml.section;
 
+
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.collect.Tuple;
-import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.xcontent.XContentLocation;
 import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.test.NotEqualMessageBuilder;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
+import static io.github.nik9000.mapmatcher.ListMatcher.matchesList;
+import static io.github.nik9000.mapmatcher.MapMatcher.assertMap;
+import static io.github.nik9000.mapmatcher.MapMatcher.matchesMap;
 import static org.elasticsearch.test.hamcrest.RegexMatcher.matches;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 
 /**
@@ -47,7 +42,7 @@ public class MatchAssertion extends Assertion {
         return new MatchAssertion(location, stringObjectTuple.v1(), stringObjectTuple.v2());
     }
 
-    private static final Logger logger = Loggers.getLogger(MatchAssertion.class);
+    private static final Logger logger = LogManager.getLogger(MatchAssertion.class);
 
     public MatchAssertion(XContentLocation location, String field, Object expectedValue) {
         super(location, field, expectedValue);
@@ -70,8 +65,13 @@ public class MatchAssertion extends Assertion {
             }
         }
 
-        assertNotNull("field [" + getField() + "] is null", actualValue);
         logger.trace("assert that [{}] matches [{}] (field [{}])", actualValue, expectedValue, getField());
+        if (expectedValue == null) {
+            assertNull("field [" + getField() + "] should be null but was [" + actualValue + "]", actualValue);
+            return;
+        }
+        assertNotNull("field [" + getField() + "] is null", actualValue);
+
         if (actualValue.getClass().equals(safeClass(expectedValue)) == false) {
             if (actualValue instanceof Number && expectedValue instanceof Number) {
                 //Double 1.0 is equal to Integer 1
@@ -81,10 +81,13 @@ public class MatchAssertion extends Assertion {
             }
         }
 
-        if (expectedValue.equals(actualValue) == false) {
-            NotEqualMessageBuilder message = new NotEqualMessageBuilder();
-            message.compare(getField(), actualValue, expectedValue);
-            throw new AssertionError(getField() + " didn't match expected value:\n" + message);
+        if (expectedValue instanceof Map) {
+            assertThat(actualValue, instanceOf(Map.class));
+            assertMap((Map<?, ?>) actualValue, matchesMap((Map<?, ?>) expectedValue));
+        } else if (expectedValue instanceof List) {
+            assertThat(actualValue, instanceOf(List.class));
+            assertMap((List<?>) actualValue, matchesList((List<?>) expectedValue));
         }
+        assertThat(expectedValue, equalTo(actualValue));
     }
 }

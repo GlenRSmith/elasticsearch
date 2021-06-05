@@ -1,13 +1,13 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
+ * Licensed to Elasticsearch B.V. under one or more contributor
  * license agreements. See the NOTICE file distributed with
  * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+ * ownership. Elasticsearch B.V. licenses this file to you under
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -87,14 +87,14 @@ final class RequestLogger {
     /**
      * Logs a request that failed
      */
-    static void logFailedRequest(Log logger, HttpUriRequest request, HttpHost host, Exception e) {
+    static void logFailedRequest(Log logger, HttpUriRequest request, Node node, Exception e) {
         if (logger.isDebugEnabled()) {
-            logger.debug("request [" + request.getMethod() + " " + host + getUri(request.getRequestLine()) + "] failed", e);
+            logger.debug("request [" + request.getMethod() + " " + node.getHost() + getUri(request.getRequestLine()) + "] failed", e);
         }
         if (tracer.isTraceEnabled()) {
             String traceRequest;
             try {
-                traceRequest = buildTraceRequest(request, host);
+                traceRequest = buildTraceRequest(request, node.getHost());
             } catch (IOException e1) {
                 tracer.trace("error while reading request for trace purposes", e);
                 traceRequest = "";

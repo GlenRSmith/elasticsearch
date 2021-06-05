@@ -1,67 +1,69 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.ingest;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertThat;
+import java.util.Objects;
 
 public class IngestDocumentMatcher {
     /**
      * Helper method to assert the equivalence between two IngestDocuments.
      *
-     * @param a first object to compare
-     * @param b second object to compare
+     * @param docA first document to compare
+     * @param docB second document to compare
      */
-    public static void assertIngestDocument(Object a, Object b) {
+    public static void assertIngestDocument(IngestDocument docA, IngestDocument docB) {
+        if ((deepEquals(docA.getIngestMetadata(), docB.getIngestMetadata(), true) &&
+            deepEquals(docA.getSourceAndMetadata(), docB.getSourceAndMetadata(), false)) == false) {
+            throw new AssertionError("Expected [" + docA + "] but received [" + docB + "].");
+        }
+    }
+
+    private static boolean deepEquals(Object a, Object b, boolean isIngestMeta) {
         if (a instanceof Map) {
             Map<?, ?> mapA = (Map<?, ?>) a;
+            if (b instanceof Map == false) {
+                return false;
+            }
             Map<?, ?> mapB = (Map<?, ?>) b;
+            if (mapA.size() != mapB.size()) {
+                return false;
+            }
             for (Map.Entry<?, ?> entry : mapA.entrySet()) {
-                if (entry.getValue() instanceof List || entry.getValue() instanceof Map) {
-                    assertIngestDocument(entry.getValue(), mapB.get(entry.getKey()));
+                Object key = entry.getKey();
+                // Don't compare the timestamp of ingest metadata since it will differ between executions
+                if ((isIngestMeta && "timestamp".equals(key)) == false
+                    && deepEquals(entry.getValue(), mapB.get(key), false) == false) {
+                    return false;
                 }
             }
+            return true;
         } else if (a instanceof List) {
             List<?> listA = (List<?>) a;
+            if (b instanceof List == false) {
+                return false;
+            }
             List<?> listB = (List<?>) b;
-            for (int i = 0; i < listA.size(); i++) {
+            int countA = listA.size();
+            if (countA != listB.size()) {
+                return false;
+            }
+            for (int i = 0; i < countA; i++) {
                 Object value = listA.get(i);
-                if (value instanceof List || value instanceof Map) {
-                    assertIngestDocument(value, listB.get(i));
+                if (deepEquals(value, listB.get(i), false) == false) {
+                    return false;
                 }
             }
-        } else if (a instanceof byte[]) {
-            assertArrayEquals((byte[]) a, (byte[])b);
-        } else if (a instanceof IngestDocument) {
-            IngestDocument docA = (IngestDocument) a;
-            IngestDocument docB = (IngestDocument) b;
-            assertIngestDocument(docA.getSourceAndMetadata(), docB.getSourceAndMetadata());
-            assertIngestDocument(docA.getIngestMetadata(), docB.getIngestMetadata());
+            return true;
         } else {
-            String msg = String.format(Locale.ROOT, "Expected %s class to be equal to %s", a.getClass().getName(), b.getClass().getName());
-            assertThat(msg, a, equalTo(b));
+            return Objects.deepEquals(a, b);
         }
     }
 }

@@ -1,24 +1,14 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.ingest.attachment;
 
+import org.apache.tika.exception.ZeroByteFileException;
 import org.apache.tika.language.LanguageIdentifier;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.metadata.TikaCoreProperties;
@@ -28,7 +18,6 @@ import org.elasticsearch.ingest.AbstractProcessor;
 import org.elasticsearch.ingest.IngestDocument;
 import org.elasticsearch.ingest.Processor;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -41,6 +30,7 @@ import static org.elasticsearch.ingest.ConfigurationUtils.newConfigurationExcept
 import static org.elasticsearch.ingest.ConfigurationUtils.readBooleanProperty;
 import static org.elasticsearch.ingest.ConfigurationUtils.readIntProperty;
 import static org.elasticsearch.ingest.ConfigurationUtils.readOptionalList;
+import static org.elasticsearch.ingest.ConfigurationUtils.readOptionalStringProperty;
 import static org.elasticsearch.ingest.ConfigurationUtils.readStringProperty;
 
 public final class AttachmentProcessor extends AbstractProcessor {
@@ -54,15 +44,19 @@ public final class AttachmentProcessor extends AbstractProcessor {
     private final Set<Property> properties;
     private final int indexedChars;
     private final boolean ignoreMissing;
+    private final String indexedCharsField;
+    private final String resourceName;
 
-    AttachmentProcessor(String tag, String field, String targetField, Set<Property> properties,
-                        int indexedChars, boolean ignoreMissing) throws IOException {
-        super(tag);
+    AttachmentProcessor(String tag, String description, String field, String targetField, Set<Property> properties,
+                        int indexedChars, boolean ignoreMissing, String indexedCharsField, String resourceName) {
+        super(tag, description);
         this.field = field;
         this.targetField = targetField;
         this.properties = properties;
         this.indexedChars = indexedChars;
         this.ignoreMissing = ignoreMissing;
+        this.indexedCharsField = indexedCharsField;
+        this.resourceName = resourceName;
     }
 
     boolean isIgnoreMissing() {
@@ -70,82 +64,105 @@ public final class AttachmentProcessor extends AbstractProcessor {
     }
 
     @Override
-    public void execute(IngestDocument ingestDocument) {
+    public IngestDocument execute(IngestDocument ingestDocument) {
         Map<String, Object> additionalFields = new HashMap<>();
 
         byte[] input = ingestDocument.getFieldValueAsBytes(field, ignoreMissing);
-
+        String resourceNameInput = null;
+        if (resourceName != null) {
+            resourceNameInput = ingestDocument.getFieldValue(resourceName, String.class, true);
+        }
         if (input == null && ignoreMissing) {
-            return;
+            return ingestDocument;
         } else if (input == null) {
             throw new IllegalArgumentException("field [" + field + "] is null, cannot parse.");
         }
 
+        Integer indexedChars = this.indexedChars;
+
+        if (indexedCharsField != null) {
+            // If the user provided the number of characters to be extracted as part of the document, we use it
+            indexedChars = ingestDocument.getFieldValue(indexedCharsField, Integer.class, true);
+            if (indexedChars == null) {
+                // If the field does not exist we fall back to the global limit
+                indexedChars = this.indexedChars;
+            }
+        }
+
+        Metadata metadata = new Metadata();
+        if (resourceNameInput != null) {
+            metadata.set(Metadata.RESOURCE_NAME_KEY, resourceNameInput);
+        }
+        String parsedContent = "";
         try {
-            Metadata metadata = new Metadata();
-            String parsedContent = TikaImpl.parse(input, metadata, indexedChars);
-
-            if (properties.contains(Property.CONTENT) && Strings.hasLength(parsedContent)) {
-                // somehow tika seems to append a newline at the end automatically, lets remove that again
-                additionalFields.put(Property.CONTENT.toLowerCase(), parsedContent.trim());
-            }
-
-            if (properties.contains(Property.LANGUAGE) && Strings.hasLength(parsedContent)) {
-                LanguageIdentifier identifier = new LanguageIdentifier(parsedContent);
-                String language = identifier.getLanguage();
-                additionalFields.put(Property.LANGUAGE.toLowerCase(), language);
-            }
-
-            if (properties.contains(Property.DATE)) {
-                String createdDate = metadata.get(TikaCoreProperties.CREATED);
-                if (createdDate != null) {
-                    additionalFields.put(Property.DATE.toLowerCase(), createdDate);
-                }
-            }
-
-            if (properties.contains(Property.TITLE)) {
-                String title = metadata.get(TikaCoreProperties.TITLE);
-                if (Strings.hasLength(title)) {
-                    additionalFields.put(Property.TITLE.toLowerCase(), title);
-                }
-            }
-
-            if (properties.contains(Property.AUTHOR)) {
-                String author = metadata.get("Author");
-                if (Strings.hasLength(author)) {
-                    additionalFields.put(Property.AUTHOR.toLowerCase(), author);
-                }
-            }
-
-            if (properties.contains(Property.KEYWORDS)) {
-                String keywords = metadata.get("Keywords");
-                if (Strings.hasLength(keywords)) {
-                    additionalFields.put(Property.KEYWORDS.toLowerCase(), keywords);
-                }
-            }
-
-            if (properties.contains(Property.CONTENT_TYPE)) {
-                String contentType = metadata.get(Metadata.CONTENT_TYPE);
-                if (Strings.hasLength(contentType)) {
-                    additionalFields.put(Property.CONTENT_TYPE.toLowerCase(), contentType);
-                }
-            }
-
-            if (properties.contains(Property.CONTENT_LENGTH)) {
-                String contentLength = metadata.get(Metadata.CONTENT_LENGTH);
-                long length;
-                if (Strings.hasLength(contentLength)) {
-                    length = Long.parseLong(contentLength);
-                } else {
-                    length = parsedContent.length();
-                }
-                additionalFields.put(Property.CONTENT_LENGTH.toLowerCase(), length);
-            }
+            parsedContent = TikaImpl.parse(input, metadata, indexedChars);
+        } catch (ZeroByteFileException e) {
+            // tika 1.17 throws an exception when the InputStream has 0 bytes.
+            // previously, it did not mind. This is here to preserve that behavior.
         } catch (Exception e) {
             throw new ElasticsearchParseException("Error parsing document in field [{}]", e, field);
         }
 
+        if (properties.contains(Property.CONTENT) && Strings.hasLength(parsedContent)) {
+            // somehow tika seems to append a newline at the end automatically, lets remove that again
+            additionalFields.put(Property.CONTENT.toLowerCase(), parsedContent.trim());
+        }
+
+        if (properties.contains(Property.LANGUAGE) && Strings.hasLength(parsedContent)) {
+            // TODO: stop using LanguageIdentifier...
+            LanguageIdentifier identifier = new LanguageIdentifier(parsedContent);
+            String language = identifier.getLanguage();
+            additionalFields.put(Property.LANGUAGE.toLowerCase(), language);
+        }
+
+        if (properties.contains(Property.DATE)) {
+            String createdDate = metadata.get(TikaCoreProperties.CREATED);
+            if (createdDate != null) {
+                additionalFields.put(Property.DATE.toLowerCase(), createdDate);
+            }
+        }
+
+        if (properties.contains(Property.TITLE)) {
+            String title = metadata.get(TikaCoreProperties.TITLE);
+            if (Strings.hasLength(title)) {
+                additionalFields.put(Property.TITLE.toLowerCase(), title);
+            }
+        }
+
+        if (properties.contains(Property.AUTHOR)) {
+            String author = metadata.get("Author");
+            if (Strings.hasLength(author)) {
+                additionalFields.put(Property.AUTHOR.toLowerCase(), author);
+            }
+        }
+
+        if (properties.contains(Property.KEYWORDS)) {
+            String keywords = metadata.get("Keywords");
+            if (Strings.hasLength(keywords)) {
+                additionalFields.put(Property.KEYWORDS.toLowerCase(), keywords);
+            }
+        }
+
+        if (properties.contains(Property.CONTENT_TYPE)) {
+            String contentType = metadata.get(Metadata.CONTENT_TYPE);
+            if (Strings.hasLength(contentType)) {
+                additionalFields.put(Property.CONTENT_TYPE.toLowerCase(), contentType);
+            }
+        }
+
+        if (properties.contains(Property.CONTENT_LENGTH)) {
+            String contentLength = metadata.get(Metadata.CONTENT_LENGTH);
+            long length;
+            if (Strings.hasLength(contentLength)) {
+                length = Long.parseLong(contentLength);
+            } else {
+                length = parsedContent.length();
+            }
+            additionalFields.put(Property.CONTENT_LENGTH.toLowerCase(), length);
+        }
+
         ingestDocument.setFieldValue(targetField, additionalFields);
+        return ingestDocument;
     }
 
     @Override
@@ -175,17 +192,19 @@ public final class AttachmentProcessor extends AbstractProcessor {
 
         @Override
         public AttachmentProcessor create(Map<String, Processor.Factory> registry, String processorTag,
-                                          Map<String, Object> config) throws Exception {
+                                          String description, Map<String, Object> config) throws Exception {
             String field = readStringProperty(TYPE, processorTag, config, "field");
+            String resourceName = readOptionalStringProperty(TYPE, processorTag, config, "resource_name");
             String targetField = readStringProperty(TYPE, processorTag, config, "target_field", "attachment");
-            List<String> properyNames = readOptionalList(TYPE, processorTag, config, "properties");
+            List<String> propertyNames = readOptionalList(TYPE, processorTag, config, "properties");
             int indexedChars = readIntProperty(TYPE, processorTag, config, "indexed_chars", NUMBER_OF_CHARS_INDEXED);
             boolean ignoreMissing = readBooleanProperty(TYPE, processorTag, config, "ignore_missing", false);
+            String indexedCharsField = readOptionalStringProperty(TYPE, processorTag, config, "indexed_chars_field");
 
             final Set<Property> properties;
-            if (properyNames != null) {
+            if (propertyNames != null) {
                 properties = EnumSet.noneOf(Property.class);
-                for (String fieldName : properyNames) {
+                for (String fieldName : propertyNames) {
                     try {
                         properties.add(Property.parse(fieldName));
                     } catch (Exception e) {
@@ -197,7 +216,8 @@ public final class AttachmentProcessor extends AbstractProcessor {
                 properties = DEFAULT_PROPERTIES;
             }
 
-            return new AttachmentProcessor(processorTag, field, targetField, properties, indexedChars, ignoreMissing);
+            return new AttachmentProcessor(processorTag, description, field, targetField, properties, indexedChars, ignoreMissing,
+                indexedCharsField, resourceName);
         }
     }
 

@@ -1,20 +1,9 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.painless;
@@ -26,7 +15,7 @@ import java.util.Map;
 
 public class InitializerTests extends ScriptTestCase {
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"rawtypes"})
     public void testArrayInitializers() {
         int[] ints = (int[])exec("new int[] {}");
 
@@ -53,13 +42,13 @@ public class InitializerTests extends ScriptTestCase {
             "Object[] x = new Object[] {y, z, 1 + s, s + 'aaa'}; return x;");
 
         assertEquals(4, objects.length);
-        assertEquals(new Integer(2), objects[0]);
+        assertEquals(Integer.valueOf(2), objects[0]);
         assertEquals(new ArrayList(), objects[1]);
         assertEquals("1aaa", objects[2]);
         assertEquals("aaaaaa", objects[3]);
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"rawtypes"})
     public void testListInitializers() {
         List list = (List)exec("[]");
 
@@ -85,13 +74,13 @@ public class InitializerTests extends ScriptTestCase {
         list = (List)exec("int y = 2; List z = new ArrayList(); String s = 'aaa'; List x = [y, z, 1 + s, s + 'aaa']; return x;");
 
         assertEquals(4, list.size());
-        assertEquals(new Integer(2), list.get(0));
+        assertEquals(Integer.valueOf(2), list.get(0));
         assertEquals(new ArrayList(), list.get(1));
         assertEquals("1aaa",  list.get(2));
         assertEquals("aaaaaa", list.get(3));
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"rawtypes"})
     public void testMapInitializers() {
         Map map = (Map)exec("[:]");
 
@@ -100,15 +89,15 @@ public class InitializerTests extends ScriptTestCase {
         map = (Map)exec("[5 : 7, -1 : 14]");
 
         assertEquals(2, map.size());
-        assertEquals(new Integer(7), map.get(5));
-        assertEquals(new Integer(14), map.get(-1));
+        assertEquals(Integer.valueOf(7), map.get(5));
+        assertEquals(Integer.valueOf(14), map.get(-1));
 
         map = (Map)exec("int y = 2; int z = 3; Map x = [y*z : y + z, y - z : y, z : z]; return x;");
 
         assertEquals(3, map.size());
-        assertEquals(new Integer(5), map.get(6));
-        assertEquals(new Integer(2), map.get(-1));
-        assertEquals(new Integer(3), map.get(3));
+        assertEquals(Integer.valueOf(5), map.get(6));
+        assertEquals(Integer.valueOf(2), map.get(-1));
+        assertEquals(Integer.valueOf(3), map.get(3));
 
         map = (Map)exec("int y = 2; List z = new ArrayList(); String s = 'aaa';" +
             "def x = [y : z, 1 + s : s + 'aaa']; return x;");
@@ -139,7 +128,7 @@ public class InitializerTests extends ScriptTestCase {
         list3.add(9);
 
         assertEquals(3, map.size());
-        assertEquals(new Integer(5), map.get(6));
+        assertEquals(Integer.valueOf(5), map.get(6));
         assertEquals(list2, map.get("s"));
         assertEquals(list3, map.get(3));
     }

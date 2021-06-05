@@ -1,20 +1,9 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.common.logging;
@@ -58,7 +47,7 @@ public class EvilLoggerConfigurationTests extends ESTestCase {
     }
 
     public void testResolveMultipleConfigs() throws Exception {
-        final Level level = ESLoggerFactory.getLogger("test").getLevel();
+        final Level level = LogManager.getLogger("test").getLevel();
         try {
             final Path configDir = getDataPath("config");
             final Settings settings = Settings.builder()
@@ -106,7 +95,7 @@ public class EvilLoggerConfigurationTests extends ESTestCase {
         LogConfigurator.configure(environment);
 
         final String loggerName = "test";
-        final Logger logger = ESLoggerFactory.getLogger(loggerName);
+        final Logger logger = LogManager.getLogger(loggerName);
         assertThat(logger.getLevel().toString(), equalTo(level));
     }
 
@@ -122,7 +111,7 @@ public class EvilLoggerConfigurationTests extends ESTestCase {
 
         // args should overwrite whatever is in the config
         final String loggerName = "test_resolve_order";
-        final Logger logger = ESLoggerFactory.getLogger(loggerName);
+        final Logger logger = LogManager.getLogger(loggerName);
         assertTrue(logger.isTraceEnabled());
     }
 
@@ -134,14 +123,14 @@ public class EvilLoggerConfigurationTests extends ESTestCase {
         final Environment environment = new Environment(settings, configDir);
         LogConfigurator.configure(environment);
 
-        assertThat(ESLoggerFactory.getLogger("x").getLevel(), equalTo(Level.TRACE));
-        assertThat(ESLoggerFactory.getLogger("x.y").getLevel(), equalTo(Level.DEBUG));
+        assertThat(LogManager.getLogger("x").getLevel(), equalTo(Level.TRACE));
+        assertThat(LogManager.getLogger("x.y").getLevel(), equalTo(Level.DEBUG));
 
         final Level level = randomFrom(Level.TRACE, Level.DEBUG, Level.INFO, Level.WARN, Level.ERROR);
-        Loggers.setLevel(ESLoggerFactory.getLogger("x"), level);
+        Loggers.setLevel(LogManager.getLogger("x"), level);
 
-        assertThat(ESLoggerFactory.getLogger("x").getLevel(), equalTo(level));
-        assertThat(ESLoggerFactory.getLogger("x.y").getLevel(), equalTo(level));
+        assertThat(LogManager.getLogger("x").getLevel(), equalTo(level));
+        assertThat(LogManager.getLogger("x.y").getLevel(), equalTo(level));
     }
 
     public void testMissingConfigFile() {

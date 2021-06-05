@@ -1,32 +1,17 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.painless.antlr;
 
 import org.antlr.v4.runtime.CharStream;
-import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.LexerNoViableAltException;
 import org.antlr.v4.runtime.Token;
-import org.antlr.v4.runtime.TokenSource;
 import org.antlr.v4.runtime.misc.Interval;
-import org.antlr.v4.runtime.misc.Pair;
-import org.elasticsearch.painless.Definition;
 import org.elasticsearch.painless.Location;
 
 /**
@@ -42,38 +27,17 @@ import org.elasticsearch.painless.Location;
  */
 final class EnhancedPainlessLexer extends PainlessLexer {
     private final String sourceName;
-    private final Definition definition;
+    private Token current = null;
 
-    private Token stashedNext = null;
-    private Token previous = null;
-
-    EnhancedPainlessLexer(CharStream charStream, String sourceName, Definition definition) {
+    EnhancedPainlessLexer(CharStream charStream, String sourceName) {
         super(charStream);
         this.sourceName = sourceName;
-        this.definition = definition;
-    }
-
-    public Token getPreviousToken() {
-        return previous;
     }
 
     @Override
     public Token nextToken() {
-        if (stashedNext != null) {
-            previous = stashedNext;
-            stashedNext = null;
-            return previous;
-        }
-        Token next = super.nextToken();
-        if (insertSemicolon(previous, next)) {
-            stashedNext = next;
-            previous = _factory.create(new Pair<TokenSource, CharStream>(this, _input), PainlessLexer.SEMICOLON, ";",
-                    Lexer.DEFAULT_TOKEN_CHANNEL, next.getStartIndex(), next.getStopIndex(), next.getLine(), next.getCharPositionInLine());
-            return previous;
-        } else {
-            previous = next;
-            return next;
-        }
+        current = super.nextToken();
+        return current;
     }
 
     @Override
@@ -95,13 +59,8 @@ final class EnhancedPainlessLexer extends PainlessLexer {
     }
 
     @Override
-    protected boolean isSimpleType(String name) {
-        return definition.isSimpleType(name);
-    }
-
-    @Override
-    protected boolean slashIsRegex() {
-        Token lastToken = getPreviousToken();
+    protected boolean isSlashRegex() {
+        Token lastToken = current;
         if (lastToken == null) {
             return true;
         }
@@ -115,20 +74,6 @@ final class EnhancedPainlessLexer extends PainlessLexer {
         case PainlessLexer.ID:
         case PainlessLexer.DOTINTEGER:
         case PainlessLexer.DOTID:
-            return false;
-        default:
-            return true;
-        }
-    }
-
-    private static boolean insertSemicolon(Token previous, Token next) {
-        if (previous == null || next.getType() != PainlessLexer.RBRACK) {
-            return false;
-        }
-        switch (previous.getType()) {
-        case PainlessLexer.RBRACK:     // };} would be weird!
-        case PainlessLexer.SEMICOLON:  // already have a semicolon, no need to add one
-        case PainlessLexer.LBRACK:     // empty blocks don't need a semicolon
             return false;
         default:
             return true;

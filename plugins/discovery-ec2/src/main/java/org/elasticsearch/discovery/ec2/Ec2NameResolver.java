@@ -1,29 +1,20 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.discovery.ec2;
 
-import org.apache.lucene.util.IOUtils;
+import com.amazonaws.util.EC2MetadataUtils;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.common.SuppressForbidden;
-import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.network.NetworkService.CustomNameResolver;
-import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.core.internal.io.IOUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -51,7 +42,9 @@ import java.nio.charset.StandardCharsets;
  *
  * @author Paul_Loy (keteracel)
  */
-class Ec2NameResolver extends AbstractComponent implements CustomNameResolver {
+class Ec2NameResolver implements CustomNameResolver {
+
+    private static final Logger logger = LogManager.getLogger(Ec2NameResolver.class);
 
     /**
      * enum that can be added to over time with more meta-data types (such as ipv6 when this is available)
@@ -80,13 +73,6 @@ class Ec2NameResolver extends AbstractComponent implements CustomNameResolver {
     }
 
     /**
-     * Construct a {@link CustomNameResolver}.
-     */
-    Ec2NameResolver(Settings settings) {
-        super(settings);
-    }
-
-    /**
      * @param type the ec2 hostname type to discover.
      * @return the appropriate host resolved from ec2 meta-data, or null if it cannot be obtained.
      * @see CustomNameResolver#resolveIfPossible(String)
@@ -94,7 +80,7 @@ class Ec2NameResolver extends AbstractComponent implements CustomNameResolver {
     @SuppressForbidden(reason = "We call getInputStream in doPrivileged and provide SocketPermission")
     public InetAddress[] resolve(Ec2HostnameType type) throws IOException {
         InputStream in = null;
-        String metadataUrl = AwsEc2ServiceImpl.EC2_METADATA_URL + type.ec2Name;
+        String metadataUrl = EC2MetadataUtils.getHostAddressForEC2MetadataService() + "/latest/meta-data/" + type.ec2Name;
         try {
             URL url = new URL(metadataUrl);
             logger.debug("obtaining ec2 hostname from ec2 meta-data url {}", url);

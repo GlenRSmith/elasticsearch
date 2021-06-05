@@ -1,23 +1,15 @@
 /*
- * Licensed to Elasticsearch under one or more contributor license agreements.
- * See the NOTICE file distributed with this work for additional information
- * regarding copyright ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License
- * at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.http;
 
 import org.apache.http.util.EntityUtils;
+import org.elasticsearch.client.Request;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.test.rest.ESRestTestCase;
@@ -46,7 +38,7 @@ public class RestHttpResponseHeadersIT extends ESRestTestCase {
      * - Options</a>).
      */
     public void testValidEndpointOptionsResponseHttpHeader() throws Exception {
-        Response response = client().performRequest("OPTIONS", "/_tasks");
+        Response response = client().performRequest(new Request("OPTIONS", "/_tasks"));
         assertThat(response.getStatusLine().getStatusCode(), is(200));
         assertThat(response.getHeader("Allow"), notNullValue());
         List<String> responseAllowHeaderStringArray =
@@ -64,7 +56,7 @@ public class RestHttpResponseHeadersIT extends ESRestTestCase {
      */
     public void testUnsupportedMethodResponseHttpHeader() throws Exception {
         try {
-            client().performRequest("DELETE", "/_tasks");
+            client().performRequest(new Request("DELETE", "/_tasks"));
             fail("Request should have failed with 405 error");
         } catch (ResponseException e) {
             Response response = e.getResponse();
@@ -85,9 +77,9 @@ public class RestHttpResponseHeadersIT extends ESRestTestCase {
      * 17853</a> for more information).
      */
     public void testIndexSettingsPostRequest() throws Exception {
-        client().performRequest("PUT", "/testindex");
+        client().performRequest(new Request("PUT", "/testindex"));
         try {
-            client().performRequest("POST", "/testindex/_settings");
+            client().performRequest(new Request("POST", "/testindex/_settings"));
             fail("Request should have failed with 405 error");
         } catch (ResponseException e) {
             Response response = e.getResponse();

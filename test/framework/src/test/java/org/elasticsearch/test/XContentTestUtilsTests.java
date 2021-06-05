@@ -1,24 +1,15 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.test;
 
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.xcontent.DeprecationHandler;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
@@ -38,7 +29,7 @@ import java.util.function.Predicate;
 import static org.elasticsearch.test.XContentTestUtils.insertRandomFields;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.instanceOf;;
+import static org.hamcrest.Matchers.instanceOf;
 
 public class XContentTestUtilsTests extends ESTestCase {
 
@@ -71,7 +62,8 @@ public class XContentTestUtilsTests extends ESTestCase {
         }
         builder.endObject();
 
-        try (XContentParser parser = XContentHelper.createParser(NamedXContentRegistry.EMPTY, builder.bytes(), builder.contentType())) {
+        try (XContentParser parser = XContentHelper.createParser(NamedXContentRegistry.EMPTY,
+            DeprecationHandler.THROW_UNSUPPORTED_OPERATION, BytesReference.bytes(builder), builder.contentType())) {
             parser.nextToken();
             List<String> insertPaths = XContentTestUtils.getInsertPaths(parser, new Stack<>());
             assertEquals(5, insertPaths.size());
@@ -88,15 +80,16 @@ public class XContentTestUtilsTests extends ESTestCase {
         XContentBuilder builder = JsonXContent.contentBuilder();
         builder.startObject();
         builder.endObject();
-        builder = XContentTestUtils.insertIntoXContent(XContentType.JSON.xContent(), builder.bytes(), Collections.singletonList(""),
-                () -> "inn.er1", () -> new HashMap<>());
-        builder = XContentTestUtils.insertIntoXContent(XContentType.JSON.xContent(), builder.bytes(), Collections.singletonList(""),
-                () -> "field1", () -> "value1");
-        builder = XContentTestUtils.insertIntoXContent(XContentType.JSON.xContent(), builder.bytes(),
+        builder = XContentTestUtils.insertIntoXContent(XContentType.JSON.xContent(), BytesReference.bytes(builder),
+                Collections.singletonList(""), () -> "inn.er1", () -> new HashMap<>());
+        builder = XContentTestUtils.insertIntoXContent(XContentType.JSON.xContent(), BytesReference.bytes(builder),
+                Collections.singletonList(""), () -> "field1", () -> "value1");
+        builder = XContentTestUtils.insertIntoXContent(XContentType.JSON.xContent(), BytesReference.bytes(builder),
                 Collections.singletonList("inn\\.er1"), () -> "inner2", () -> new HashMap<>());
-        builder = XContentTestUtils.insertIntoXContent(XContentType.JSON.xContent(), builder.bytes(),
+        builder = XContentTestUtils.insertIntoXContent(XContentType.JSON.xContent(), BytesReference.bytes(builder),
                 Collections.singletonList("inn\\.er1"), () -> "field2", () -> "value2");
-        try (XContentParser parser = XContentHelper.createParser(NamedXContentRegistry.EMPTY, builder.bytes(), builder.contentType())) {
+        try (XContentParser parser = XContentHelper.createParser(NamedXContentRegistry.EMPTY,
+            DeprecationHandler.THROW_UNSUPPORTED_OPERATION, BytesReference.bytes(builder), builder.contentType())) {
             Map<String, Object> map = parser.map();
             assertEquals(2, map.size());
             assertEquals("value1", map.get("field1"));
@@ -145,7 +138,7 @@ public class XContentTestUtilsTests extends ESTestCase {
         Map<String, Object> resultMap;
 
         try (XContentParser parser = createParser(XContentType.JSON.xContent(),
-                insertRandomFields(builder.contentType(), builder.bytes(), null, random()))) {
+                insertRandomFields(builder.contentType(), BytesReference.bytes(builder), null, random()))) {
             resultMap = parser.map();
         }
         assertEquals(5, resultMap.keySet().size());
@@ -159,7 +152,7 @@ public class XContentTestUtilsTests extends ESTestCase {
 
         Predicate<String> pathsToExclude = path -> path.endsWith("foo1");
         try (XContentParser parser = createParser(XContentType.JSON.xContent(),
-                insertRandomFields(builder.contentType(), builder.bytes(), pathsToExclude, random()))) {
+                insertRandomFields(builder.contentType(), BytesReference.bytes(builder), pathsToExclude, random()))) {
             resultMap = parser.map();
         }
         assertEquals(5, resultMap.keySet().size());
@@ -173,7 +166,7 @@ public class XContentTestUtilsTests extends ESTestCase {
 
         pathsToExclude = path -> path.contains("foo1");
         try (XContentParser parser = createParser(XContentType.JSON.xContent(),
-                insertRandomFields(builder.contentType(), builder.bytes(), pathsToExclude, random()))) {
+                insertRandomFields(builder.contentType(), BytesReference.bytes(builder), pathsToExclude, random()))) {
             resultMap = parser.map();
         }
         assertEquals(5, resultMap.keySet().size());

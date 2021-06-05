@@ -1,24 +1,14 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 
 package org.elasticsearch.ingest.common;
 
+import org.elasticsearch.common.network.InetAddresses;
 import org.elasticsearch.ingest.AbstractProcessor;
 import org.elasticsearch.ingest.ConfigurationUtils;
 import org.elasticsearch.ingest.IngestDocument;
@@ -42,11 +32,37 @@ public final class ConvertProcessor extends AbstractProcessor {
             @Override
             public Object convert(Object value) {
                 try {
-                    return Integer.parseInt(value.toString());
+                    String strValue = value.toString();
+                    if (strValue.startsWith("0x") || strValue.startsWith("-0x")) {
+                        return Integer.decode(strValue);
+                    }
+                    return Integer.parseInt(strValue);
                 } catch(NumberFormatException e) {
                     throw new IllegalArgumentException("unable to convert [" + value + "] to integer", e);
                 }
 
+            }
+        }, LONG {
+            @Override
+            public Object convert(Object value) {
+                try {
+                    String strValue = value.toString();
+                    if (strValue.startsWith("0x") || strValue.startsWith("-0x")) {
+                        return Long.decode(strValue);
+                    }
+                    return Long.parseLong(strValue);
+                } catch(NumberFormatException e) {
+                    throw new IllegalArgumentException("unable to convert [" + value + "] to long", e);
+                }
+            }
+        }, DOUBLE {
+            @Override
+            public Object convert(Object value) {
+                try {
+                    return Double.parseDouble(value.toString());
+                } catch(NumberFormatException e) {
+                    throw new IllegalArgumentException("unable to convert [" + value + "] to double", e);
+                }
             }
         }, FLOAT {
             @Override
@@ -68,6 +84,13 @@ public final class ConvertProcessor extends AbstractProcessor {
                     throw new IllegalArgumentException("[" + value + "] is not a boolean value, cannot convert to boolean");
                 }
             }
+        }, IP {
+            @Override
+            public Object convert(Object value) {
+                // IllegalArgumentException is thrown if unable to convert
+                InetAddresses.forString((String) value);
+                return value;
+            }
         }, STRING {
             @Override
             public Object convert(Object value) {
@@ -76,17 +99,23 @@ public final class ConvertProcessor extends AbstractProcessor {
         }, AUTO {
             @Override
             public Object convert(Object value) {
-                if (!(value instanceof String)) {
+                if ((value instanceof String) == false) {
                    return value;
                 }
                 try {
                     return BOOLEAN.convert(value);
-                } catch (IllegalArgumentException e) { }
+                } catch (IllegalArgumentException e) {}
                 try {
                     return INTEGER.convert(value);
                 } catch (IllegalArgumentException e) {}
                 try {
+                    return LONG.convert(value);
+                } catch (IllegalArgumentException e) {}
+                try {
                     return FLOAT.convert(value);
+                } catch (IllegalArgumentException e) {}
+                try {
+                    return DOUBLE.convert(value);
                 } catch (IllegalArgumentException e) {}
                 return value;
             }
@@ -116,8 +145,8 @@ public final class ConvertProcessor extends AbstractProcessor {
     private final Type convertType;
     private final boolean ignoreMissing;
 
-    ConvertProcessor(String tag, String field, String targetField, Type convertType, boolean ignoreMissing) {
-        super(tag);
+    ConvertProcessor(String tag, String description, String field, String targetField, Type convertType, boolean ignoreMissing) {
+        super(tag, description);
         this.field = field;
         this.targetField = targetField;
         this.convertType = convertType;
@@ -141,12 +170,12 @@ public final class ConvertProcessor extends AbstractProcessor {
     }
 
     @Override
-    public void execute(IngestDocument document) {
+    public IngestDocument execute(IngestDocument document) {
         Object oldValue = document.getFieldValue(field, Object.class, ignoreMissing);
         Object newValue;
 
         if (oldValue == null && ignoreMissing) {
-            return;
+            return document;
         } else if (oldValue == null) {
             throw new IllegalArgumentException("Field [" + field + "] is null, cannot be converted to type [" + convertType + "]");
         }
@@ -162,6 +191,7 @@ public final class ConvertProcessor extends AbstractProcessor {
             newValue = convertType.convert(oldValue);
         }
         document.setFieldValue(targetField, newValue);
+        return document;
     }
 
     @Override
@@ -172,13 +202,13 @@ public final class ConvertProcessor extends AbstractProcessor {
     public static final class Factory implements Processor.Factory {
         @Override
         public ConvertProcessor create(Map<String, Processor.Factory> registry, String processorTag,
-                                         Map<String, Object> config) throws Exception {
+                                       String description, Map<String, Object> config) throws Exception {
             String field = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "field");
             String typeProperty = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "type");
             String targetField = ConfigurationUtils.readStringProperty(TYPE, processorTag, config, "target_field", field);
             Type convertType = Type.fromString(processorTag, "type", typeProperty);
             boolean ignoreMissing = ConfigurationUtils.readBooleanProperty(TYPE, processorTag, config, "ignore_missing", false);
-            return new ConvertProcessor(processorTag, field, targetField, convertType, ignoreMissing);
+            return new ConvertProcessor(processorTag, description, field, targetField, convertType, ignoreMissing);
         }
     }
 }

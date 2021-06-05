@@ -1,22 +1,20 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
  */
 package org.elasticsearch.script.mustache;
+
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentHelper;
+import org.elasticsearch.script.ScriptEngine;
+import org.elasticsearch.script.ScriptException;
+import org.elasticsearch.script.TemplateScript;
+import org.elasticsearch.test.ESTestCase;
+import org.hamcrest.Matcher;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -29,21 +27,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-import com.github.mustachejava.MustacheException;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentHelper;
-import org.elasticsearch.script.ScriptEngine;
-import org.elasticsearch.script.TemplateScript;
-import org.elasticsearch.test.ESTestCase;
-import org.hamcrest.Matcher;
-
 import static java.util.Collections.singleton;
 import static java.util.Collections.singletonMap;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.isEmptyOrNullString;
 import static org.hamcrest.Matchers.not;
 
 public class MustacheTests extends ESTestCase {
@@ -224,11 +214,17 @@ public class MustacheTests extends ESTestCase {
     }
 
     public void testsUnsupportedTagsToJson() {
-        MustacheException e = expectThrows(MustacheException.class, () -> compile("{{#toJson}}{{foo}}{{bar}}{{/toJson}}"));
+        final String script = "{{#toJson}}{{foo}}{{bar}}{{/toJson}}";
+        ScriptException e = expectThrows(ScriptException.class, () -> compile(script));
         assertThat(e.getMessage(), containsString("Mustache function [toJson] must contain one and only one identifier"));
+        assertEquals(MustacheScriptEngine.NAME, e.getLang());
+        assertEquals(script, e.getScript());
 
-        e = expectThrows(MustacheException.class, () -> compile("{{#toJson}}{{/toJson}}"));
+        final String script2 = "{{#toJson}}{{/toJson}}";
+        e = expectThrows(ScriptException.class, () -> compile(script2));
         assertThat(e.getMessage(), containsString("Mustache function [toJson] must contain one and only one identifier"));
+        assertEquals(MustacheScriptEngine.NAME, e.getLang());
+        assertEquals(script2, e.getScript());
     }
 
     public void testEmbeddedToJSON() throws Exception {
@@ -248,7 +244,7 @@ public class MustacheTests extends ESTestCase {
                     .endObject();
 
         Map<String, Object> ctx =
-            singletonMap("ctx", XContentHelper.convertToMap(builder.bytes(), false, builder.contentType()).v2());
+            singletonMap("ctx", XContentHelper.convertToMap(BytesReference.bytes(builder), false, builder.contentType()).v2());
 
         assertScript("{{#ctx.bulks}}{{#toJson}}.{{/toJson}}{{/ctx.bulks}}", ctx,
                 equalTo("{\"index\":\"index-1\",\"id\":1,\"type\":\"type-1\"}{\"index\":\"index-2\",\"id\":2,\"type\":\"type-2\"}"));
@@ -290,7 +286,7 @@ public class MustacheTests extends ESTestCase {
                                                 .endObject();
 
         Map<String, Object> ctx =
-            singletonMap("ctx", XContentHelper.convertToMap(builder.bytes(), false, builder.contentType()).v2());
+            singletonMap("ctx", XContentHelper.convertToMap(BytesReference.bytes(builder), false, builder.contentType()).v2());
 
         assertScript("{{#join}}ctx.people.0.emails{{/join}}", ctx,
                 equalTo("john@smith.com,john.smith@email.com,jsmith@email.com"));
@@ -311,11 +307,17 @@ public class MustacheTests extends ESTestCase {
     }
 
     public void testsUnsupportedTagsJoin() {
-        MustacheException e = expectThrows(MustacheException.class, () -> compile("{{#join}}{{/join}}"));
+        final String script = "{{#join}}{{/join}}";
+        ScriptException e = expectThrows(ScriptException.class, () -> compile(script));
         assertThat(e.getMessage(), containsString("Mustache function [join] must contain one and only one identifier"));
+        assertEquals(MustacheScriptEngine.NAME, e.getLang());
+        assertEquals(script, e.getScript());
 
-        e = expectThrows(MustacheException.class, () -> compile("{{#join delimiter='a'}}{{/join delimiter='b'}}"));
+        final String script2 = "{{#join delimiter='a'}}{{/join delimiter='b'}}";
+        e = expectThrows(ScriptException.class, () -> compile(script2));
         assertThat(e.getMessage(), containsString("Mismatched start/end tags"));
+        assertEquals(MustacheScriptEngine.NAME, e.getLang());
+        assertEquals(script2, e.getScript());
     }
 
     public void testJoinWithCustomDelimiter() {
@@ -371,7 +373,7 @@ public class MustacheTests extends ESTestCase {
     }
 
     private TemplateScript.Factory compile(String script) {
-        assertThat("cannot compile null or empty script", script, not(isEmptyOrNullString()));
+        assertThat("cannot compile null or empty script", script, not(emptyOrNullString()));
         return engine.compile(null, script, TemplateScript.CONTEXT, Collections.emptyMap());
     }
 }
